@@ -1,0 +1,51 @@
+# ======================
+# SECRETS & CREDENTIALS
+# ======================
+*service-account*.json
+*service-account*.json.json
+firebase-service-account.json
+firebase-service-account.json.json
+*.pem
+*.key
+.env
+.env.local
+.env.production
+.env.development
+
+# ======================
+# DEPENDENCIES
+# ======================
+node_modules/
+.pnp
+.pnp.js
+
+# ======================
+# BUILD OUTPUTS
+# ======================
+dist/
+build/
+out/
+.next/
+.nuxt/
+
+# ======================
+# LOGS
+# ======================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ======================
+# OS / EDITOR FILES
+# ======================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ======================
+# FIREBASE
+# ======================
+.firebase/
+firebase-debug.log
