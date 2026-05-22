@@ -59,3 +59,43 @@ export const getAllOfflinePatients = async () => {
   });
   return patients;
 };
+
+export const cachePatientsOffline = async (patients) => {
+  for (const p of patients) {
+    await patientDB.setItem(p.id, p);
+  }
+};
+
+export const deletePatientOffline = async (patientId) => {
+  // Remove from offline patient DB
+  await patientDB.removeItem(patientId);
+
+  // Remove any offline logs for this patient
+  const logs = [];
+  await symptomLogsDB.iterate((value, key) => {
+    if (value.patientId === patientId) {
+      logs.push(key);
+    }
+  });
+  for (const logKey of logs) {
+    await symptomLogsDB.removeItem(logKey);
+  }
+
+  // Check if there was an offline creation item for this patient in the queue
+  const queue = await getSyncQueue();
+  let wasOfflineCreated = false;
+  for (const item of queue) {
+    if (item.type === 'PATIENT' && item.payload?.id === patientId) {
+      wasOfflineCreated = true;
+      await clearSyncItem(item.id);
+    } else if (item.payload?.patientId === patientId) {
+      // Clear any symptom logs from the queue for this offline-created patient
+      await clearSyncItem(item.id);
+    }
+  }
+
+  // If it was not created offline (meaning it exists on the server), queue a delete action
+  if (!wasOfflineCreated) {
+    await addToSyncQueue('DELETE_PATIENT', { id: patientId });
+  }
+};

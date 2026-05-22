@@ -54,9 +54,44 @@ function Login({ onLogin, isOffline }) {
       await sendTokenToBackend(idToken);
     } catch (err) {
       console.error('Email Auth Error', err);
-      setErrorMsg(err.message || 'Authentication failed');
+      setErrorMsg(getFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getFriendlyErrorMessage = (error) => {
+    if (!error) return 'Authentication failed. Please try again.';
+    const code = error.code || '';
+    switch (code) {
+      case 'auth/invalid-credential':
+      case 'auth/wrong-password':
+      case 'auth/user-not-found':
+        return 'Incorrect email or password. Please verify your credentials and try again.';
+      case 'auth/email-already-in-use':
+        return 'This email address is already registered. Please log in or use a different email.';
+      case 'auth/weak-password':
+        return 'The password is too weak. It must be at least 6 characters long.';
+      case 'auth/invalid-email':
+        return 'Please enter a valid email address.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your internet connection and try again.';
+      case 'auth/too-many-requests':
+        return 'Too many failed login attempts. Please try again later.';
+      case 'auth/user-disabled':
+        return 'This user account has been disabled. Please contact support.';
+      default:
+        const msg = (error.message || '').toLowerCase();
+        if (msg.includes('wrong-password') || msg.includes('invalid-credential') || msg.includes('user-not-found')) {
+          return 'Incorrect email or password. Please verify your credentials and try again.';
+        }
+        if (msg.includes('email-already-in-use')) {
+          return 'This email address is already registered. Please log in or use a different email.';
+        }
+        if (msg.includes('weak-password')) {
+          return 'The password is too weak. It must be at least 6 characters long.';
+        }
+        return error.message || 'Authentication failed. Please try again.';
     }
   };
 
@@ -74,7 +109,7 @@ function Login({ onLogin, isOffline }) {
       await sendTokenToBackend(idToken);
     } catch (err) {
       console.error('Google Auth Error', err);
-      setErrorMsg(err.message || 'Google Sign-in failed');
+      setErrorMsg(getFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }

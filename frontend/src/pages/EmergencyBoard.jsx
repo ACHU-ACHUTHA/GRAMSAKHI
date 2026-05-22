@@ -40,6 +40,15 @@ function EmergencyBoard({ isOffline }) {
         headers: { 'Content-Type': 'application/json' }
       });
       if (res.ok) {
+        const data = await res.json();
+        if (data.patientId) {
+          try {
+            const { deletePatientOffline } = await import('../db/offlineStorage');
+            await deletePatientOffline(data.patientId);
+          } catch (offlineErr) {
+            console.error('Offline delete error:', offlineErr);
+          }
+        }
         setEmergencies(prev => prev.filter(e => e.id !== emergencyId));
       }
     } catch (err) {
@@ -95,7 +104,7 @@ function EmergencyBoard({ isOffline }) {
                   <div>
                     <h3 style={{ margin: 0, fontSize: '1rem' }}>{e.patient?.name || 'Unknown Patient'}</h3>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>
-                      {e.patient?.age} yrs • {e.patient?.gender} • {e.patient?.village}
+                      {e.patient?.age} yrs • {e.patient?.gender} • {e.patient?.village} {e.patient?.bloodGroup && `• Blood Group: ${e.patient.bloodGroup}`}
                     </p>
                   </div>
                 </div>
@@ -114,21 +123,32 @@ function EmergencyBoard({ isOffline }) {
                 <p style={{ fontSize: '0.875rem', margin: 0, color: '#7f1d1d' }}>{e.description}</p>
               </div>
 
-              {/* QR Code - ONE per patient */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'white', borderRadius: '10px', border: '1px solid #fecaca', marginBottom: '1.25rem' }}>
-                <div style={{ background: 'white', padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', flexShrink: 0 }}>
-                  <QRCodeSVG
-                    value={`GRAMSAKHI:PATIENT:${e.patientId}:${e.patient?.name}:${e.patient?.age}`}
-                    size={80}
-                    level="H"
-                  />
+              {/* QR Code & SMS Sharing Container */}
+              <div style={{ background: 'white', padding: '1rem', borderRadius: '10px', border: '1px solid #fecaca', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <div style={{ background: 'white', padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', flexShrink: 0 }}>
+                    <QRCodeSVG
+                      value={`GRAMSAKHI EMERGENCY REPORT\n---------------------------\nPatient: ${e.patient?.name || 'Unknown'}\nAge/Gender: ${e.patient?.age || 'N/A'}y / ${e.patient?.gender || 'N/A'}\nBlood Group: ${e.patient?.bloodGroup || 'Not Specified'}\nVillage: ${e.patient?.village || 'N/A'}\nEmergency Symptoms: ${e.description}\nHistory: ${e.patient?.medicalHistory || 'None'}`}
+                      size={80}
+                      level="H"
+                    />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Hospital QR Code</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.3 }}>
+                      Scan at hospital reception for instant access to symptoms, blood group, and medical history.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Hospital QR Code</p>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-                    Scan at hospital reception for instant access to patient's medical history and ASHA logs.
-                  </p>
-                </div>
+                
+                {/* SMS Share button */}
+                <a 
+                  href={`sms:?body=${encodeURIComponent(`GRAMSAKHI EMERGENCY REFERRAL:\nPatient: ${e.patient?.name || 'Unknown'} (${e.patient?.age || 'N/A'}y/${e.patient?.gender || 'N/A'})\nBlood Group: ${e.patient?.bloodGroup || 'Not Specified'}\nVillage: ${e.patient?.village || 'N/A'}\nEmergency Symptoms: ${e.description}\nHistory: ${e.patient?.medicalHistory || 'None'}`)}`}
+                  className="btn btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', textDecoration: 'none', padding: '0.65rem', borderRadius: '8px', fontWeight: 600, fontSize: '0.85rem', width: '100%', marginTop: '0.75rem', boxSizing: 'border-box' }}
+                >
+                  💬 Share Report via SMS
+                </a>
               </div>
 
               {/* Resolve Button */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BrowserRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Heart, LayoutDashboard, Users, AlertTriangle, Bell, Search, X, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import './index.css';
@@ -48,6 +48,8 @@ function Sidebar() {
 
 function TopHeader({ worker, handleLogout, emergencyCount }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [q, setQ] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -79,6 +81,13 @@ function TopHeader({ worker, handleLogout, emergencyCount }) {
     return `${Math.floor(diff / 60)}h ago`;
   };
 
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (q.trim()) {
+      navigate(`/patients?q=${encodeURIComponent(q.trim())}`);
+    }
+  };
+
   return (
     <header className="top-header">
       <div className="header-title">
@@ -86,10 +95,18 @@ function TopHeader({ worker, handleLogout, emergencyCount }) {
         <p>{format(new Date(), 'EEEE, d MMMM yyyy')}</p>
       </div>
       <div className="header-actions">
-        <div className="search-bar">
-          <Search size={18} color="var(--text-muted)" />
-          <input type="text" placeholder="Search..." />
-        </div>
+        <form onSubmit={handleSearchSubmit} className="search-bar" style={{ display: 'flex', alignItems: 'center' }}>
+          <button type="submit" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <Search size={18} color="var(--text-muted)" />
+          </button>
+          <input 
+            type="text" 
+            placeholder="Search patients..." 
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={{ border: 'none', outline: 'none', marginLeft: '8px', background: 'transparent', width: '100%' }}
+          />
+        </form>
 
         {/* Notifications Bell */}
         <div style={{ position: 'relative' }}>
@@ -190,6 +207,11 @@ function App() {
 
     updateSyncCount();
 
+    // Immediate sync on load if online
+    if (navigator.onLine) {
+      processBackgroundSync();
+    }
+
     // Also try to sync periodically if online
     const syncInterval = setInterval(() => {
       if (navigator.onLine) processBackgroundSync();
@@ -225,6 +247,7 @@ function App() {
         }
         updateSyncCount();
         console.log(`Synced ${processedIds.length} items`);
+        window.dispatchEvent(new Event('sync-completed'));
       }
     } catch (error) {
       console.error('Background sync failed:', error);

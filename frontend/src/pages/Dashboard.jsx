@@ -9,6 +9,12 @@ function Dashboard({ worker, isOffline }) {
 
   useEffect(() => {
     fetchPatients();
+
+    const handleSync = () => {
+      fetchPatients();
+    };
+    window.addEventListener('sync-completed', handleSync);
+    return () => window.removeEventListener('sync-completed', handleSync);
   }, [isOffline, worker]);
 
   const fetchPatients = async () => {
@@ -20,42 +26,104 @@ function Dashboard({ worker, isOffline }) {
         setPatients(data);
       }
     } catch (err) {
-      console.log('Using offline data for dashboard charts (not fully implemented)');
+      console.log('Using offline data for dashboard charts');
+      try {
+        const { getAllOfflinePatients } = await import('../db/offlineStorage');
+        const offlinePatients = await getAllOfflinePatients();
+        const filtered = offlinePatients.filter(p => p.workerId === worker?.id || p.workerId === 'default-worker');
+        setPatients(filtered);
+      } catch (e) {
+        console.error('Failed to load offline data for dashboard', e);
+      }
     }
   };
 
-  // Mock data for charts as per screenshot
-  const lineData = [
-    { name: 'Jan', val1: 3, val2: 12 },
-    { name: 'Feb', val1: 5, val2: 10 },
-    { name: 'Mar', val1: 4, val2: 13 },
-    { name: 'Apr', val1: 3, val2: 8 },
-  ];
+  const getDisplayRisk = (p) => {
+    if (p.riskLevel === 'High Emergency') return 'High';
+    if (p.riskLevel === 'Moderate Risk') return 'Medium';
+    if (p.riskLevel === 'High' || p.riskLevel === 'Medium' || p.riskLevel === 'Low') return p.riskLevel;
 
+    if (p.symptoms && p.symptoms.length > 0) {
+      const latest = [...p.symptoms].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      if (latest.riskLevel === 'High Emergency') return 'High';
+      if (latest.riskLevel === 'Moderate Risk') return 'Medium';
+      if (latest.riskLevel === 'High' || latest.riskLevel === 'Medium' || latest.riskLevel === 'Low') return latest.riskLevel;
+    }
+
+    if (p.medicalHistory) {
+      const h = p.medicalHistory.toLowerCase();
+      const highConditions = ['cancer','carcinoma','tumor','leukemia','lymphoma','heart failure',
+        'kidney failure','renal failure','liver failure','hiv','aids','tuberculosis','tb',
+        'sepsis','sickle cell'];
+      const medConditions = ['diabetes','diabetic','hypertension','high blood pressure','asthma',
+        'copd','epilepsy','anemia','malnutrition','pneumonia','hepatitis','dengue','malaria',
+        'typhoid','cardiac','heart disease'];
+      if (highConditions.some(c => h.includes(c))) return 'High';
+      if (medConditions.some(c => h.includes(c))) return 'Medium';
+    }
+    return 'Low';
+  };
+
+  // Dynamic line chart calculation
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const last4Months = [];
+  for (let i = 3; i >= 0; i--) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    last4Months.push({
+      monthIndex: d.getMonth(),
+      name: months[d.getMonth()],
+      val1: 0,
+      val2: 0
+    });
+  }
+
+  patients.forEach(p => {
+    const date = new Date(p.createdAt || Date.now());
+    const mIndex = date.getMonth();
+    const target = last4Months.find(m => m.monthIndex === mIndex);
+    if (target) {
+      const risk = getDisplayRisk(p);
+      if (risk === 'High') {
+        target.val1++;
+      } else {
+        target.val2++;
+      }
+    }
+  });
+
+  const lineData = last4Months.map(({ name, val1, val2 }) => ({ name, val1, val2 }));
+
+  // Dynamic pie chart calculation
+  const lowCount = patients.filter(p => getDisplayRisk(p) === 'Low').length;
+  const medCount = patients.filter(p => getDisplayRisk(p) === 'Medium').length;
+  const highCount = patients.filter(p => getDisplayRisk(p) === 'High').length;
   const pieData = [
-    { name: 'Low', value: 2, color: '#10b981' },
-    { name: 'Medium', value: 3, color: '#f59e0b' },
-    { name: 'High', value: 3, color: '#ef4444' },
+    { name: 'Low', value: lowCount, color: '#10b981' },
+    { name: 'Medium', value: medCount, color: '#f59e0b' },
+    { name: 'High', value: highCount, color: '#ef4444' },
   ];
 
-  const barData = [
-    { name: '0-18', val: 0 },
-    { name: '19-35', val: 3 },
-    { name: '36-50', val: 1 },
-    { name: '51-65', val: 2 },
-    { name: '65+', val: 2 },
-  ];
+  // Dynamic bar chart calculation
+  const ageGroups = {
+    '0-18': 0,
+    '19-35': 0,
+    '36-50': 0,
+    '51-65': 0,
+    '65+': 0
+  };
+  patients.forEach(p => {
+    const age = p.age;
+    if (age <= 18) ageGroups['0-18']++;
+    else if (age <= 35) ageGroups['19-35']++;
+    else if (age <= 50) ageGroups['36-50']++;
+    else if (age <= 65) ageGroups['51-65']++;
+    else ageGroups['65+']++;
+  });
+  const barData = Object.entries(ageGroups).map(([name, val]) => ({ name, val }));
 
   // Recent patients logic
   const recentPatients = patients.slice(0, 3);
-  if (recentPatients.length === 0) {
-    // Fill with mock data matching the screenshot if no real data
-    recentPatients.push(
-      { id: 1, name: 'Test Patient', age: 30, gender: 'Female', status: 'Stable', riskLevel: 'Medium' },
-      { id: 2, name: 'achu', age: 85, gender: 'Female', status: 'Critical', riskLevel: 'High' },
-      { id: 3, name: 'Ananya Reddy', age: 28, gender: 'Female', status: 'Recovering', riskLevel: 'Medium' }
-    );
-  }
 
   const getRiskColor = (risk) => {
     if (risk === 'High' || risk === 'High Emergency') return 'var(--risk-high)';
@@ -128,10 +196,14 @@ function Dashboard({ worker, isOffline }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {recentPatients.map((p, idx) => (
+            {recentPatients.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <p style={{ margin: 0, fontSize: '0.9rem' }}>No patients registered yet.</p>
+              </div>
+            ) : recentPatients.map((p, idx) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div className="patient-cell">
-                  <div className="patient-initial" style={{ background: getRiskColor(p.riskLevel) }}>
+                  <div className="patient-initial" style={{ background: getRiskColor(getDisplayRisk(p)) }}>
                     {p.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="patient-info">
@@ -140,7 +212,7 @@ function Dashboard({ worker, isOffline }) {
                   </div>
                 </div>
                 <div style={{ fontSize: '0.875rem', fontWeight: 500, color: '#475569' }}>
-                  {p.riskLevel === 'High Emergency' ? 'High' : p.riskLevel === 'Moderate Risk' ? 'Medium' : p.riskLevel || 'Low'}
+                  {getDisplayRisk(p)}
                 </div>
               </div>
             ))}

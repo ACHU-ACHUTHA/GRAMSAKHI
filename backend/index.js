@@ -110,16 +110,97 @@ app.get('/api/patients', async (req, res) => {
   }
 });
 
+app.delete('/api/patients/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.$transaction([
+      prisma.emergency.deleteMany({ where: { patientId: id } }),
+      prisma.symptomLog.deleteMany({ where: { patientId: id } }),
+      prisma.patient.delete({ where: { id } })
+    ]);
+    res.json({ success: true, message: 'Patient deleted successfully' });
+  } catch (error) {
+    console.error('Delete patient error:', error);
+    res.status(500).json({ error: 'Failed to delete patient' });
+  }
+});
+
+// Auto-triage helper based on medical history
+async function runAutoTriage(patient) {
+  if (!patient.medicalHistory) return;
+
+  const HIGH_CONDITIONS = ['cancer','carcinoma','tumor','leukemia','lymphoma','heart failure',
+    'kidney failure','renal failure','liver failure','hiv','aids','tuberculosis','tb',
+    'sepsis','sickle cell'];
+  const MED_CONDITIONS = ['diabetes','diabetic','hypertension','high blood pressure','asthma',
+    'copd','epilepsy','anemia','malnutrition','pneumonia','hepatitis','dengue','malaria',
+    'typhoid','cardiac','heart disease'];
+
+  const h = patient.medicalHistory.toLowerCase();
+  let autoRiskLevel = null;
+  let matchedConditions = [];
+
+  HIGH_CONDITIONS.forEach(c => { if (h.includes(c)) matchedConditions.push(c); });
+  if (matchedConditions.length > 0) {
+    autoRiskLevel = 'High Emergency';
+  } else {
+    MED_CONDITIONS.forEach(c => { if (h.includes(c)) matchedConditions.push(c); });
+    if (matchedConditions.length > 0) autoRiskLevel = 'Moderate Risk';
+  }
+
+  if (autoRiskLevel) {
+    const guidance = autoRiskLevel === 'High Emergency'
+      ? `CRITICAL: Pre-existing high-risk condition(s): ${matchedConditions.join(', ')}. Immediate monitoring required.`
+      : `URGENT: Pre-existing condition(s): ${matchedConditions.join(', ')}. Consult PHC within 24 hours.`;
+
+    // Ensure we don't duplicate medical history symptom logs
+    const existingLog = await prisma.symptomLog.findFirst({
+      where: {
+        patientId: patient.id,
+        symptoms: `Medical history: ${matchedConditions.join(', ')}`
+      }
+    });
+
+    if (!existingLog) {
+      await prisma.symptomLog.create({
+        data: {
+          patientId: patient.id,
+          symptoms: `Medical history: ${matchedConditions.join(', ')}`,
+          riskLevel: autoRiskLevel,
+          notes: guidance
+        }
+      });
+    }
+
+    // Auto-create emergency for High Emergency cases
+    if (autoRiskLevel === 'High Emergency') {
+      const activeEmergency = await prisma.emergency.findFirst({
+        where: { patientId: patient.id, status: 'Active' }
+      });
+      if (!activeEmergency) {
+        await prisma.emergency.create({
+          data: {
+            patientId: patient.id,
+            description: `High-risk medical history: ${matchedConditions.join(', ')}`,
+            status: 'Active'
+          }
+        });
+      }
+    }
+  }
+}
+
 app.post('/api/patients', async (req, res) => {
   try {
-    const { id, name, age, gender, phone, village, workerId: inputWorkerId, medicalHistory } = req.body;
+    const { id, name, age, gender, phone, village, workerId: inputWorkerId, medicalHistory, bloodGroup } = req.body;
 
     // Check if patient already exists (from sync)
     if (id) {
-      const existingPatient = await prisma.patient.findUnique({ where: { id } });
-      if (existingPatient) {
-        return res.json(existingPatient);
-      }
+      const existingPatient = await prisma.patient.findUnique({
+        where: { id },
+        include: { symptoms: true, emergencies: true }
+      });
+      if (existingPatient) return res.json(existingPatient);
     }
 
     // Ensure we have a valid worker ID
@@ -135,9 +216,18 @@ app.post('/api/patients', async (req, res) => {
     }
 
     const newPatient = await prisma.patient.create({
-      data: { id, name, age, gender, phone, village, workerId, medicalHistory }
+      data: { id, name, age, gender, phone, village, workerId, medicalHistory, bloodGroup }
     });
-    res.json(newPatient);
+
+    // Run auto-triage
+    await runAutoTriage(newPatient);
+
+    // Return full patient with symptom logs
+    const fullPatient = await prisma.patient.findUnique({
+      where: { id: newPatient.id },
+      include: { symptoms: true, emergencies: true }
+    });
+    res.json(fullPatient);
   } catch (error) {
     console.error('Create patient error:', error);
     res.status(500).json({ error: 'Failed to create patient' });
@@ -146,26 +236,49 @@ app.post('/api/patients', async (req, res) => {
 
 // AI Symptom Analysis Route (DDXPlus Triage Predictor)
 app.post('/api/analyze-symptoms', async (req, res) => {
-  const { symptoms, patientId } = req.body;
+  const { symptoms, patientId, medicalHistory } = req.body;
 
   if (!symptoms || !Array.isArray(symptoms)) {
     return res.status(400).json({ error: 'Symptoms array is required' });
   }
 
   const triageWeights = {
-    // Critical Pathologies / High Emergency
-    'chest pain': 9.5, 'severe breathing difficulty': 9.8, 'unconscious': 10.0,
-    'seizures': 9.2, 'severe bleeding': 9.5, 'paralysis': 9.0, 'sudden vision loss': 8.8,
-    'severe abdominal pain': 8.5, 'confusion': 8.0,
+    // ── Critical / High Emergency Symptoms ──────────────────────────────
+    'chest pain': 9.5, 'severe breathing difficulty': 9.8, 'breathing difficulty': 8.0,
+    'shortness of breath': 8.0, 'unconscious': 10.0, 'unresponsive': 10.0,
+    'seizures': 9.2, 'severe bleeding': 9.5, 'bleeding': 7.5,
+    'paralysis': 9.0, 'sudden vision loss': 8.8,
+    'severe abdominal pain': 8.5, 'abdominal pain': 6.0,
+    'confusion': 8.0, 'stroke': 9.8, 'heart attack': 10.0,
 
-    // Urgent / Moderate Risk
+    // ── Urgent / Moderate Risk Symptoms ─────────────────────────────────
     'high fever': 7.0, 'fever': 5.0, 'persistent vomiting': 6.5, 'vomiting': 4.0,
     'severe headache': 6.5, 'headache': 3.0, 'diarrhea': 4.5, 'dizziness': 5.5,
-    'palpitations': 6.0, 'weakness': 4.5,
+    'palpitations': 6.0, 'weakness': 4.5, 'swelling': 5.0, 'jaundice': 7.0,
+    'blood in urine': 7.5, 'blood in stool': 7.5,
 
-    // Non-Urgent / Low Risk
+    // ── Non-Urgent / Low Risk Symptoms ──────────────────────────────────
     'cough': 3.5, 'runny nose': 2.0, 'sore throat': 3.0, 'mild rash': 3.0,
-    'muscle ache': 3.5, 'fatigue': 4.0,
+    'muscle ache': 3.5, 'fatigue': 4.0, 'nausea': 3.5, 'rash': 3.5,
+  };
+
+  const medicalHistoryWeights = {
+    // Life-threatening conditions
+    'cancer': 9.0, 'carcinoma': 9.0, 'tumor': 8.5, 'leukemia': 9.5, 'lymphoma': 9.0,
+    'heart disease': 8.5, 'heart failure': 9.0, 'cardiac': 8.5,
+    'kidney failure': 9.0, 'renal failure': 9.0, 'liver failure': 9.0,
+    'hiv': 8.5, 'aids': 9.0, 'tuberculosis': 8.0, 'tb': 8.0,
+    'sepsis': 9.5, 'stroke': 8.5, 'paralysis': 8.5,
+
+    // Moderate / Chronic conditions
+    'diabetes': 7.0, 'diabetic': 7.0, 'hypertension': 6.5, 'high blood pressure': 6.5,
+    'asthma': 6.0, 'copd': 7.0, 'chronic': 6.0, 'epilepsy': 7.0,
+    'anemia': 5.5, 'malnutrition': 6.0, 'pneumonia': 7.5, 'hepatitis': 7.0,
+    'thyroid': 5.5, 'arthritis': 4.5, 'sickle cell': 8.0,
+    'dengue': 7.5, 'malaria': 7.0, 'typhoid': 6.5,
+
+    // Low-risk conditions
+    'allergy': 3.5, 'allergies': 3.5, 'migraine': 4.5,
   };
 
   let totalRiskScore = 0;
@@ -173,54 +286,65 @@ app.post('/api/analyze-symptoms', async (req, res) => {
 
   symptoms.forEach(s => {
     const sym = s.toLowerCase().trim();
-    let score = 2.0; // Base score
+    let score = 2.0;
     for (const [key, weight] of Object.entries(triageWeights)) {
-      if (sym.includes(key)) {
-        score = Math.max(score, weight);
-      }
+      if (sym.includes(key)) score = Math.max(score, weight);
     }
     totalRiskScore += score;
     maxSingleRisk = Math.max(maxSingleRisk, score);
   });
 
+  // Score medical history
+  let maxHistoryRisk = 0;
+  const matchedConditions = [];
+  if (medicalHistory) {
+    const hist = medicalHistory.toLowerCase();
+    for (const [condition, weight] of Object.entries(medicalHistoryWeights)) {
+      if (hist.includes(condition)) {
+        matchedConditions.push({ condition, weight });
+        if (weight > maxHistoryRisk) maxHistoryRisk = weight;
+      }
+    }
+  }
+
+  const effectiveMaxRisk = Math.max(maxSingleRisk, maxHistoryRisk * 0.95);
+  const effectiveTotalScore = totalRiskScore + (maxHistoryRisk > 0 ? maxHistoryRisk * 0.5 : 0);
+
   let riskLevel = 'Low Risk';
   let guidance = 'Rest, maintain hydration, and monitor symptoms. Consult a local clinic if symptoms persist.';
   let isEmergency = false;
 
-  if (maxSingleRisk >= 8.5 || totalRiskScore >= 15.0) {
+  if (effectiveMaxRisk >= 8.5 || effectiveTotalScore >= 15.0) {
     riskLevel = 'High Emergency';
     guidance = 'CRITICAL TRIAGE: Immediate hospital referral required. Life-threatening pathology possible. Dispatching alert to nearest health center.';
     isEmergency = true;
-  } else if (maxSingleRisk >= 5.5 || totalRiskScore >= 9.0) {
+  } else if (effectiveMaxRisk >= 5.5 || effectiveTotalScore >= 9.0) {
     riskLevel = 'Moderate Risk';
     guidance = 'URGENT TRIAGE: Consult with a primary health center within 24 hours. Monitor closely for escalation of symptoms.';
   }
 
-  // If patientId is provided, save the symptom log
+  if (matchedConditions.length > 0 && symptoms.length === 0) {
+    guidance += ` Pre-existing condition(s) detected: ${matchedConditions.map(c => c.condition).join(', ')}.`;
+  }
+
+  // Save symptom log if patientId provided
   let logId = null;
   if (patientId) {
     try {
       const log = await prisma.symptomLog.create({
-        data: {
-          patientId,
-          symptoms: symptoms.join(', '),
-          riskLevel,
-          notes: guidance
-        }
+        data: { patientId, symptoms: symptoms.join(', '), riskLevel, notes: guidance }
       });
       logId = log.id;
 
       if (isEmergency) {
-        // Prevent duplicate active emergencies
         const activeEmergency = await prisma.emergency.findFirst({
           where: { patientId, status: 'Active' }
         });
-
         if (!activeEmergency) {
           await prisma.emergency.create({
             data: {
               patientId,
-              description: `High risk symptoms: ${symptoms.join(', ')}`,
+              description: `High risk symptoms: ${symptoms.join(', ')}${matchedConditions.length ? ` | History: ${matchedConditions.map(c => c.condition).join(', ')}` : ''}`,
               status: 'Active'
             }
           });
@@ -231,14 +355,9 @@ app.post('/api/analyze-symptoms', async (req, res) => {
     }
   }
 
-  res.json({
-    riskLevel,
-    guidance,
-    isEmergency,
-    analyzedSymptoms: symptoms,
-    logId
-  });
+  res.json({ riskLevel, guidance, isEmergency, analyzedSymptoms: symptoms, matchedConditions, logId });
 });
+
 
 // Sync Offline Queue
 app.post('/api/sync', async (req, res) => {
@@ -253,7 +372,7 @@ app.post('/api/sync', async (req, res) => {
     try {
       if (item.type === 'PATIENT') {
         const p = item.payload;
-        const exists = await prisma.patient.findUnique({ where: { id: p.id } });
+        let exists = await prisma.patient.findUnique({ where: { id: p.id } });
 
         let workerId = p.workerId;
         if (workerId === 'default-worker' || !workerId) {
@@ -263,10 +382,11 @@ app.post('/api/sync', async (req, res) => {
         }
 
         if (!exists) {
-          await prisma.patient.create({
-            data: { id: p.id, name: p.name, age: p.age, gender: p.gender, phone: p.phone, village: p.village, workerId, medicalHistory: p.medicalHistory }
+          exists = await prisma.patient.create({
+            data: { id: p.id, name: p.name, age: p.age, gender: p.gender, phone: p.phone, village: p.village, workerId, medicalHistory: p.medicalHistory, bloodGroup: p.bloodGroup }
           });
         }
+        await runAutoTriage(exists);
         processedIds.push(item.id);
       } else if (item.type === 'SYMPTOM_LOG') {
         const l = item.payload;
@@ -293,6 +413,18 @@ app.post('/api/sync', async (req, res) => {
           }
         }
         processedIds.push(item.id);
+      } else if (item.type === 'DELETE_PATIENT') {
+        const { id } = item.payload;
+        try {
+          await prisma.$transaction([
+            prisma.emergency.deleteMany({ where: { patientId: id } }),
+            prisma.symptomLog.deleteMany({ where: { patientId: id } }),
+            prisma.patient.delete({ where: { id } })
+          ]);
+        } catch (e) {
+          console.log(`Failed or already deleted patient in sync: ${id}`);
+        }
+        processedIds.push(item.id);
       }
     } catch (err) {
       console.error('Sync error for item', item.id, err);
@@ -316,17 +448,31 @@ app.get('/api/emergencies', async (req, res) => {
   }
 });
 
-// Resolve an emergency
+// Resolve an emergency and remove patient data automatically
 app.patch('/api/emergencies/:id/resolve', async (req, res) => {
   try {
     const { id } = req.params;
-    const updated = await prisma.emergency.update({
-      where: { id },
-      data: { status: 'Resolved', resolvedAt: new Date() }
+    const emergency = await prisma.emergency.findUnique({
+      where: { id }
     });
-    res.json(updated);
+    
+    if (!emergency) {
+      return res.status(404).json({ error: 'Emergency not found' });
+    }
+    
+    const patientId = emergency.patientId;
+    
+    // Remove the patient data completely (deletes patient, emergencies, and symptom logs)
+    await prisma.$transaction([
+      prisma.emergency.deleteMany({ where: { patientId } }),
+      prisma.symptomLog.deleteMany({ where: { patientId } }),
+      prisma.patient.delete({ where: { id: patientId } })
+    ]);
+    
+    res.json({ success: true, message: 'Emergency resolved and patient data removed', patientId });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to resolve emergency' });
+    console.error('Resolve emergency error:', error);
+    res.status(500).json({ error: 'Failed to resolve emergency and remove patient data' });
   }
 });
 
