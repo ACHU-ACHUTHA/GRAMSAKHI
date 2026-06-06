@@ -9,9 +9,10 @@
   },
   "auth": {
     "providers": {
+      "emailPassword": true,
       "googleSignIn": {
         "oAuthBrandDisplayName": "Gramsakhi",
-        "supportEmail": "testnewuser123@example.com"
+        "supportEmail": "gayatrikodamati@gmail.com"
       }
     }
   }
