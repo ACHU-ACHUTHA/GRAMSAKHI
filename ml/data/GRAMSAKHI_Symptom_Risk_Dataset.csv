@@ -1,0 +1,74 @@
+symptom_or_condition,risk_level
+Common Cold,Low
+Runny Nose,Low
+Sneezing,Low
+Dry Cough,Low
+Mild Cough,Low
+Mild Fever,Low
+Headache,Low
+Body Pain,Low
+Fatigue,Low
+Sore Throat,Low
+Seasonal Allergy,Low
+Dust Allergy,Low
+Itchy Eyes,Low
+Mild Skin Rash,Low
+Acidity,Low
+Indigestion,Low
+Constipation,Low
+Minor Cuts,Low
+Minor Burns,Low
+Back Pain,Low
+Neck Pain,Low
+Joint Pain,Low
+Muscle Pain,Low
+Loss of Appetite,Low
+Motion Sickness,Low
+Mild Ear Pain,Low
+Mild Toothache,Low
+Fever,Medium
+Persistent Fever,Medium
+Persistent Cough,Medium
+Asthma (Stable),Medium
+Diabetes,Medium
+Hypertension,Medium
+Diarrhea (Motions),Medium
+Vomiting,Medium
+Dizziness,Medium
+Cancer (Stable),Medium
+Anemia,Medium
+Thyroid Disorder,Medium
+Malaria Suspected,Medium
+Typhoid Suspected,Medium
+Dengue Suspected,Medium
+Pregnancy (Routine Monitoring),Medium
+Chronic Kidney Disease,Medium
+Bronchitis,Medium
+Pneumonia Suspected,Medium
+High Fever (>103°F),High
+Chest Pain,High
+Breathing Difficulty,High
+Severe Asthma Attack,High
+Heart Attack Symptoms,High
+Stroke Symptoms,High
+Unconsciousness,High
+Seizures/Fits,High
+Severe Bleeding,High
+Oxygen Level Below 90%,High
+Cancer with Severe Symptoms,High
+Kidney Failure Symptoms,High
+Liver Failure Symptoms,High
+Poisoning,High
+Snake Bite,High
+Dog Bite (Rabies Risk),High
+Road Accident Injury,High
+Pregnancy Complications,High
+Heavy Pregnancy Bleeding,High
+Newborn Breathing Difficulty,High
+Anaphylaxis,High
+Appendicitis Suspected,High
+Meningitis Symptoms,High
+Cardiac Arrest Symptoms,High
+Heat Stroke,High
+Postpartum Hemorrhage,High
+Severe Respiratory Distress,High
