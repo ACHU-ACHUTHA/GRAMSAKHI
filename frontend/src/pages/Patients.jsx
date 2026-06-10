@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_URL } from '../utils/api';
 import { useLocation } from 'react-router-dom';
 import { Eye, Trash2, X, AlertTriangle, User, Phone, MapPin, Calendar, Activity } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -28,7 +29,7 @@ function AddPatientModal({ worker, onClose, onSave }) {
       };
       // Try online first
       try {
-        const res = await fetch('http://localhost:5000/api/patients', {
+        const res = await fetch(`${API_URL}/api/patients`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(patientData)
@@ -271,7 +272,7 @@ function AddSymptomModal({ patient, onClose, onSave, isOffline }) {
         const { analyzeSymptomsLocally } = await import('../utils/localAiEngine');
         analysisResult = analyzeSymptomsLocally(selectedSymptoms, patient.medicalHistory);
       } else {
-        const res = await fetch('http://localhost:5000/api/analyze-symptoms', {
+        const res = await fetch(`${API_URL}/api/analyze-symptoms`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -427,7 +428,7 @@ function Patients({ worker, isOffline, updateSyncCount }) {
   const fetchPatients = async () => {
     try {
       if (isOffline) throw new Error('Offline');
-      const res = await fetch(`http://localhost:5000/api/patients?workerId=${worker?.id}`);
+      const res = await fetch(`${API_URL}/api/patients?workerId=${worker?.id}`);
       if (res.ok) {
         const data = await res.json();
         setPatients(data);
@@ -475,7 +476,7 @@ function Patients({ worker, isOffline, updateSyncCount }) {
         await deletePatientOffline(patient.id);
         if (updateSyncCount) updateSyncCount();
       } else {
-        const res = await fetch(`http://localhost:5000/api/patients/${patient.id}`, {
+        const res = await fetch(`${API_URL}/api/patients/${patient.id}`, {
           method: 'DELETE'
         });
         if (!res.ok) {

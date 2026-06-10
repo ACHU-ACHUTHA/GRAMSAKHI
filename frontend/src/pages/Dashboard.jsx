@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_URL } from '../utils/api';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell
@@ -20,7 +21,7 @@ function Dashboard({ worker, isOffline }) {
   const fetchPatients = async () => {
     try {
       if (isOffline) throw new Error('Offline');
-      const res = await fetch(`http://localhost:5000/api/patients?workerId=${worker?.id}`);
+      const res = await fetch(`${API_URL}/api/patients?workerId=${worker?.id}`);
       if (res.ok) {
         const data = await res.json();
         setPatients(data);

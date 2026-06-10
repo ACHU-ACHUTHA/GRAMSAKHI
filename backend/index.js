@@ -7,15 +7,21 @@ const admin = require('firebase-admin');
 const path = require('path');
 
 try {
-  const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './firebase-service-account.json';
-  const serviceAccount = require(path.resolve(__dirname, serviceAccountPath));
+  let serviceAccount;
+  // Support inline JSON credentials (for Vercel / cloud environments)
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    serviceAccount = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+  } else {
+    const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './firebase-service-account.json';
+    serviceAccount = require(path.resolve(__dirname, serviceAccountPath));
+  }
 
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
   console.log('Firebase Admin initialized successfully.');
 } catch (e) {
-  console.log('Firebase Admin initialization error (Ensure GOOGLE_APPLICATION_CREDENTIALS is set and the JSON file exists):', e.message);
+  console.log('Firebase Admin initialization error:', e.message);
 }
 
 const prisma = new PrismaClient();
@@ -476,6 +482,11 @@ app.patch('/api/emergencies/:id/resolve', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Only start the server when run directly (not when imported by Vercel)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+module.exports = app;

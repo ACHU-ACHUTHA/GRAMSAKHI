@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_URL } from '../utils/api';
 
 function Onboarding({ worker, onComplete }) {
   const [name, setName] = useState(worker?.name !== 'ASHA Worker' ? worker?.name : '');
@@ -13,7 +14,7 @@ function Onboarding({ worker, onComplete }) {
 
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/worker/${worker.id}`, {
+      const res = await fetch(`${API_URL}/api/worker/${worker.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, age, village, phone })

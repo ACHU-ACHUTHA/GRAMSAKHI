@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_URL } from '../utils/api';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
 
@@ -15,7 +16,7 @@ function EmergencyBoard({ isOffline }) {
   const fetchEmergencies = async () => {
     if (isOffline) return;
     try {
-      const res = await fetch('http://localhost:5000/api/emergencies');
+      const res = await fetch(`${API_URL}/api/emergencies`);
       if (res.ok) {
         const data = await res.json();
         // Deduplicate: keep only one emergency per patient (the most recent)
@@ -35,7 +36,7 @@ function EmergencyBoard({ isOffline }) {
   const handleResolve = async (emergencyId) => {
     setResolving(emergencyId);
     try {
-      const res = await fetch(`http://localhost:5000/api/emergencies/${emergencyId}/resolve`, {
+      const res = await fetch(`${API_URL}/api/emergencies/${emergencyId}/resolve`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' }
       });

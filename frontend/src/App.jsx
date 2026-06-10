@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { API_URL } from './utils/api';
 import { BrowserRouter as Router, Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Heart, LayoutDashboard, Users, AlertTriangle, Bell, Search, X, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
@@ -58,7 +59,7 @@ function TopHeader({ worker, handleLogout, emergencyCount }) {
     // Fetch emergencies as notifications
     const fetchNotifs = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/emergencies');
+        const res = await fetch(`${API_URL}/api/emergencies`);
         if (res.ok) {
           const data = await res.json();
           setNotifications(data.slice(0, 5));
@@ -234,7 +235,7 @@ function App() {
       const queue = await getSyncQueue();
       if (queue.length === 0) return;
 
-      const response = await fetch('http://localhost:5000/api/sync', {
+      const response = await fetch(`${API_URL}/api/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ queue })
