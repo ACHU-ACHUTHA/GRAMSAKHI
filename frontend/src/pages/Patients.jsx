@@ -201,17 +201,17 @@ function PatientDetailModal({ patient, onClose }) {
         <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e2e8f0' }}>
           <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', color: 'var(--primary-color)' }}>🏥 Hospital Referral (QR & SMS)</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', background: '#f0fdf4', padding: '0.75rem', borderRadius: '10px', border: '1px solid #bbf7d0' }}>
-              <div style={{ background: 'white', padding: '4px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', background: '#f0fdf4', padding: '1rem', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+              <div style={{ background: 'white', padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
                 <QRCodeSVG
-                  value={`GRAMSAKHI PATIENT REPORT\nName: ${patient.name}\nAge/Gender: ${patient.age}y/${patient.gender}\nBlood Group: ${patient.bloodGroup || 'Not Specified'}\nVillage: ${patient.village}\nHistory: ${patient.medicalHistory || 'None'}\nLatest Symptoms: ${patient.symptoms && patient.symptoms.length > 0 ? patient.symptoms[0].symptoms : 'None logged'}`}
-                  size={90}
-                  level="H"
+                  value={`${window.location.origin}/referral?type=referral&name=${encodeURIComponent(patient.name)}&age=${patient.age}&gender=${patient.gender}&blood=${encodeURIComponent(patient.bloodGroup || '')}&village=${encodeURIComponent(patient.village)}&history=${encodeURIComponent(patient.medicalHistory || '')}&symptoms=${encodeURIComponent(patient.symptoms && patient.symptoms.length > 0 ? patient.symptoms[0].symptoms : 'None logged')}`}
+                  size={140}
+                  level="M"
                 />
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#166534' }}>
-                <strong>Scan Referral QR Code</strong>
-                <p style={{ margin: '0.25rem 0 0', lineHeight: 1.3 }}>Hospitals can scan this code to instantly receive the patient's vitals, symptoms, and medical details offline.</p>
+              <div style={{ fontSize: '0.8rem', color: '#166534', lineHeight: 1.4 }}>
+                <strong style={{ fontSize: '0.9rem', display: 'block', marginBottom: '0.25rem' }}>Scan Referral QR Code</strong>
+                <span style={{ margin: 0, display: 'block', color: '#14532d' }}>Hospitals can scan this code to instantly receive the patient's details, symptoms, and medical history offline without any internet connection.</span>
               </div>
             </div>
             

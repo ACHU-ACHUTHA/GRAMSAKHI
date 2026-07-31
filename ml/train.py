@@ -31,7 +31,14 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -96,7 +103,10 @@ def train_models(X_train, y_train, X_test, y_test):
     models = {
         "Decision Tree": DecisionTreeClassifier(random_state=RANDOM_STATE),
         "Random Forest": RandomForestClassifier(
-            n_estimators=200, random_state=RANDOM_STATE
+            n_estimators=200,
+            max_depth=8,
+            min_samples_leaf=2,
+            random_state=RANDOM_STATE,
         ),
         "Logistic Regression": LogisticRegression(
             max_iter=1000, random_state=RANDOM_STATE, C=1.0
@@ -108,16 +118,51 @@ def train_models(X_train, y_train, X_test, y_test):
     for name, model in models.items():
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
+        
+        # Check if the model has predict_proba
+        if hasattr(model, "predict_proba"):
+            y_prob = model.predict_proba(X_test)
+            roc_auc_weighted = roc_auc_score(y_test, y_prob, multi_class="ovr", average="weighted")
+            roc_auc_macro = roc_auc_score(y_test, y_prob, multi_class="ovr", average="macro")
+        else:
+            roc_auc_weighted = float('nan')
+            roc_auc_macro = float('nan')
+
         acc = accuracy_score(y_test, y_pred)
+        prec_weighted = precision_score(y_test, y_pred, average="weighted", zero_division=0)
+        prec_macro = precision_score(y_test, y_pred, average="macro", zero_division=0)
+        rec_weighted = recall_score(y_test, y_pred, average="weighted", zero_division=0)
+        rec_macro = recall_score(y_test, y_pred, average="macro", zero_division=0)
+        f1_weighted = f1_score(y_test, y_pred, average="weighted", zero_division=0)
+        f1_macro = f1_score(y_test, y_pred, average="macro", zero_division=0)
 
         # Cross-validation on the training set for a more robust estimate
         cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring="accuracy")
 
-        results[name] = {"model": model, "accuracy": acc, "cv_mean": cv_scores.mean()}
+        results[name] = {
+            "model": model, 
+            "accuracy": acc, 
+            "cv_mean": cv_scores.mean(),
+            "precision_weighted": prec_weighted,
+            "precision_macro": prec_macro,
+            "recall_weighted": rec_weighted,
+            "recall_macro": rec_macro,
+            "f1_weighted": f1_weighted,
+            "f1_macro": f1_macro,
+            "roc_auc_weighted": roc_auc_weighted,
+            "roc_auc_macro": roc_auc_macro,
+        }
 
         print(f"  +-- {name}")
-        print(f"  |   Test Accuracy : {acc:.4f}")
-        print(f"  |   CV Accuracy   : {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+        print(f"  |   Test Accuracy    : {acc:.4f}")
+        print(f"  |   CV Accuracy      : {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+        print(f"  |   Precision (Wtd)  : {prec_weighted:.4f}  |  Macro: {prec_macro:.4f}")
+        print(f"  |   Recall (Wtd)     : {rec_weighted:.4f}  |  Macro: {rec_macro:.4f}")
+        print(f"  |   F1-score (Wtd)   : {f1_weighted:.4f}  |  Macro: {f1_macro:.4f}")
+        if not pd.isna(roc_auc_weighted):
+            print(f"  |   ROC-AUC (Wtd)    : {roc_auc_weighted:.4f}  |  Macro: {roc_auc_macro:.4f}")
+        else:
+            print(f"  |   ROC-AUC          : N/A")
         print(f"  |   Classification Report:")
         report = classification_report(
             y_test, y_pred,

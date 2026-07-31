@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
-import { API_URL } from '../utils/api';
+import React, { useState, useEffect } from 'react';
+import { API_URL, apiFetch } from '../utils/api';
 import { auth, googleProvider } from '../firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+} from 'firebase/auth';
 
 function Login({ onLogin, isOffline }) {
   const [email, setEmail] = useState('');
@@ -12,26 +18,48 @@ function Login({ onLogin, isOffline }) {
 
   const sendTokenToBackend = async (idToken) => {
     try {
-      const res = await fetch(`${API_URL}/api/login`, {
+      const res = await apiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: idToken })
+        body: JSON.stringify({ token: idToken }),
       });
-      
-      if (res.ok) {
-        const worker = await res.json();
-        localStorage.setItem('workerId', worker.id);
-        localStorage.setItem('worker', JSON.stringify(worker));
-        onLogin(worker);
-      } else {
-        const data = await res.json();
-        setErrorMsg(data.error || 'Login failed on server');
-      }
+
+      const worker = await res.json();
+      localStorage.setItem('workerId', worker.id);
+      localStorage.setItem('worker', JSON.stringify(worker));
+      onLogin(worker);
     } catch (err) {
       console.error('Backend login error', err);
-      setErrorMsg('Network error while connecting to server.');
+      setErrorMsg(err.message || 'Network error while connecting to server.');
     }
   };
+
+  useEffect(() => {
+    let active = true;
+
+    const completeRedirectSignIn = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (!result?.user || !active) return;
+
+        setLoading(true);
+        setErrorMsg('');
+        const idToken = await result.user.getIdToken();
+        await sendTokenToBackend(idToken);
+      } catch (err) {
+        console.error('Google redirect sign-in error', err);
+        if (active) setErrorMsg(getFriendlyErrorMessage(err));
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    completeRedirectSignIn();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleEmailAuth = async (e) => {
     e.preventDefault();
@@ -81,6 +109,18 @@ function Login({ onLogin, isOffline }) {
         return 'Too many failed login attempts. Please try again later.';
       case 'auth/user-disabled':
         return 'This user account has been disabled. Please contact support.';
+      case 'auth/popup-closed-by-user':
+        return 'Google sign-in was cancelled. Please try again.';
+      case 'auth/popup-blocked':
+        return 'Popup was blocked. Redirecting to Google sign-in...';
+      case 'auth/unauthorized-domain':
+        return 'This domain is not authorized for Google sign-in. Add it in Firebase Authentication settings.';
+      case 'auth/operation-not-allowed':
+        return 'Google sign-in is not enabled. Enable Google provider in Firebase Authentication.';
+      case 'auth/account-exists-with-different-credential':
+        return 'An account already exists with this email using a different sign-in method.';
+      case 'auth/cancelled-popup-request':
+        return 'Another sign-in popup is already open. Close it and try again.';
       default:
         const msg = (error.message || '').toLowerCase();
         if (msg.includes('wrong-password') || msg.includes('invalid-credential') || msg.includes('user-not-found')) {
@@ -110,6 +150,13 @@ function Login({ onLogin, isOffline }) {
       await sendTokenToBackend(idToken);
     } catch (err) {
       console.error('Google Auth Error', err);
+
+      if (err.code === 'auth/popup-blocked') {
+        setErrorMsg('Popup blocked. Redirecting to Google sign-in...');
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+
       setErrorMsg(getFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
@@ -129,10 +176,10 @@ function Login({ onLogin, isOffline }) {
           {errorMsg && <p style={{ color: 'var(--danger-color)', marginBottom: '1rem', textAlign: 'center', fontWeight: 600 }}>{errorMsg}</p>}
           <div className="input-group">
             <label className="input-label">Email Address</label>
-            <input 
-              type="email" 
-              className="input-field" 
-              placeholder="e.g. asha@example.com" 
+            <input
+              type="email"
+              className="input-field"
+              placeholder="e.g. asha@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -140,10 +187,10 @@ function Login({ onLogin, isOffline }) {
           </div>
           <div className="input-group">
             <label className="input-label">Password</label>
-            <input 
-              type="password" 
-              className="input-field" 
-              placeholder="••••••••" 
+            <input
+              type="password"
+              className="input-field"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -160,9 +207,9 @@ function Login({ onLogin, isOffline }) {
         </button>
 
         <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-          <button 
-            type="button" 
-            onClick={() => setIsSignUp(!isSignUp)} 
+          <button
+            type="button"
+            onClick={() => setIsSignUp(!isSignUp)}
             style={{ background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', textDecoration: 'underline' }}>
             {isSignUp ? 'Already have an account? Log In' : 'Need an account? Sign Up'}
           </button>

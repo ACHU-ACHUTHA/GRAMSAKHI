@@ -10,6 +10,7 @@ import Patients from './pages/Patients';
 import EmergencyBoard from './pages/EmergencyBoard';
 import Login from './components/Login';
 import Onboarding from './components/Onboarding';
+import PublicReferral from './pages/PublicReferral';
 import { getSyncQueue, clearSyncItem } from './db/offlineStorage';
 
 function Sidebar() {
@@ -266,7 +267,20 @@ function App() {
     setWorker(updatedWorker);
   };
 
+  const isPublicReferralPath = window.location.pathname.startsWith('/referral');
+
   if (!worker) {
+    if (isPublicReferralPath) {
+      return (
+        <Router>
+          <main style={{ minHeight: '100vh', background: '#f8fafc', padding: 0 }}>
+            <Routes>
+              <Route path="/referral" element={<PublicReferral />} />
+            </Routes>
+          </main>
+        </Router>
+      );
+    }
     return <Login onLogin={setWorker} isOffline={isOffline} />;
   }
 
@@ -292,6 +306,7 @@ function App() {
               <Route path="/" element={<Dashboard worker={worker} isOffline={isOffline} syncCount={syncCount} updateSyncCount={updateSyncCount} />} />
               <Route path="/patients" element={<Patients worker={worker} isOffline={isOffline} updateSyncCount={updateSyncCount} />} />
               <Route path="/emergency" element={<EmergencyBoard isOffline={isOffline} />} />
+              <Route path="/referral" element={<PublicReferral />} />
             </Routes>
           </main>
         </div>

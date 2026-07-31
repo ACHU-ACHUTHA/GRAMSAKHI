@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { API_URL } from '../utils/api';
+import { apiFetch } from '../utils/api';
 
 function Onboarding({ worker, onComplete }) {
   const [name, setName] = useState(worker?.name !== 'ASHA Worker' ? worker?.name : '');
@@ -14,21 +14,17 @@ function Onboarding({ worker, onComplete }) {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/worker/${worker.id}`, {
+      const res = await apiFetch(`/api/worker/${worker.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, age, village, phone })
+        body: JSON.stringify({ name, age, village, phone }),
       });
-      
-      if (res.ok) {
-        const updatedWorker = await res.json();
-        onComplete(updatedWorker);
-      } else {
-        alert('Failed to save profile. Please try again.');
-      }
+
+      const updatedWorker = await res.json();
+      onComplete(updatedWorker);
     } catch (err) {
       console.error('Update profile error', err);
-      alert('Network error while saving profile.');
+      alert(err.message || 'Network error while saving profile.');
     } finally {
       setLoading(false);
     }

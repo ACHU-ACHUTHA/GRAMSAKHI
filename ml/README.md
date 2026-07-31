@@ -43,8 +43,8 @@ This will:
 
 **Sample output:**
 ```
-[4/5] Best model: Random Forest
-       Test Accuracy: 0.6000  |  CV Accuracy: 0.5530
+[4/5] Best model: Logistic Regression
+       Test Accuracy: 0.6000  |  CV Accuracy: 0.5182
 ```
 
 ### 3. Test Predictions (CLI)
@@ -112,11 +112,11 @@ Instead of one-hot encoding each unique symptom string (which cannot generalize)
 - This allows the model to make reasonable predictions even for symptom descriptions not seen during training
 
 ### Models Compared
-| Model               | Test Accuracy | CV Accuracy |
-|---------------------|--------------|-------------|
-| Decision Tree       | 53.3%        | 63.8%       |
-| **Random Forest**   | **60.0%**    | **55.3%**   |
-| Logistic Regression | 60.0%        | 51.8%       |
+| Model                       | Test Accuracy | CV Accuracy |
+|-----------------------------|--------------|-------------|
+| Decision Tree               | 53.3%        | 63.8%       |
+| Random Forest               | 53.3%        | 48.3%       |
+| **Logistic Regression**     | **60.0%**    | **51.8%**   |
 
 ### Dataset
 - **Source**: `GRAMSAKHI_Symptom_Risk_Dataset.csv`

@@ -127,17 +127,17 @@ function EmergencyBoard({ isOffline }) {
               {/* QR Code & SMS Sharing Container */}
               <div style={{ background: 'white', padding: '1rem', borderRadius: '10px', border: '1px solid #fecaca', marginBottom: '1.25rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <div style={{ background: 'white', padding: '0.5rem', borderRadius: '8px', border: '1px solid #e2e8f0', flexShrink: 0 }}>
+                  <div style={{ background: 'white', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
                     <QRCodeSVG
-                      value={`GRAMSAKHI EMERGENCY REPORT\n---------------------------\nPatient: ${e.patient?.name || 'Unknown'}\nAge/Gender: ${e.patient?.age || 'N/A'}y / ${e.patient?.gender || 'N/A'}\nBlood Group: ${e.patient?.bloodGroup || 'Not Specified'}\nVillage: ${e.patient?.village || 'N/A'}\nEmergency Symptoms: ${e.description}\nHistory: ${e.patient?.medicalHistory || 'None'}`}
-                      size={80}
-                      level="H"
+                      value={`${window.location.origin}/referral?type=emergency&name=${encodeURIComponent(e.patient?.name || '')}&age=${e.patient?.age || ''}&gender=${e.patient?.gender || ''}&blood=${encodeURIComponent(e.patient?.bloodGroup || '')}&village=${encodeURIComponent(e.patient?.village || '')}&history=${encodeURIComponent(e.patient?.medicalHistory || '')}&symptoms=${encodeURIComponent(e.description || '')}`}
+                      size={120}
+                      level="M"
                     />
                   </div>
-                  <div>
-                    <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Hospital QR Code</p>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.3 }}>
-                      Scan at hospital reception for instant access to symptoms, blood group, and medical history.
+                  <div style={{ lineHeight: 1.4 }}>
+                    <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 0.25rem' }}>Hospital QR Code</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
+                      Scan at hospital reception for instant access to symptoms, blood group, and medical history offline.
                     </p>
                   </div>
                 </div>
