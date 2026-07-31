@@ -5,7 +5,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate && node scripts/copy-models.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

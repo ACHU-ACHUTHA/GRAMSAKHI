@@ -5,6 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const admin = require('firebase-admin');
 
 const path = require('path');
+const { spawn } = require('child_process');
 
 try {
   let serviceAccount;
@@ -263,16 +264,9 @@ app.post('/api/patients', async (req, res) => {
   }
 });
 
-// AI Symptom Analysis Route (DDXPlus Triage Predictor)
-app.post('/api/analyze-symptoms', async (req, res) => {
-  const { symptoms, patientId, medicalHistory } = req.body;
-
-  if (!symptoms || !Array.isArray(symptoms)) {
-    return res.status(400).json({ error: 'Symptoms array is required' });
-  }
-
+// Rule-Based Triage Helper Function (Fallback & Standalone)
+async function runRuleBasedTriage(symptoms, patientId, medicalHistory) {
   const triageWeights = {
-    // ── Critical / High Emergency Symptoms ──────────────────────────────
     'chest pain': 9.5, 'severe breathing difficulty': 9.8, 'breathing difficulty': 8.0,
     'shortness of breath': 8.0, 'unconscious': 10.0, 'unresponsive': 10.0,
     'seizures': 9.2, 'severe bleeding': 9.5, 'bleeding': 7.5,
@@ -280,33 +274,28 @@ app.post('/api/analyze-symptoms', async (req, res) => {
     'severe abdominal pain': 8.5, 'abdominal pain': 6.0,
     'confusion': 8.0, 'stroke': 9.8, 'heart attack': 10.0,
 
-    // ── Urgent / Moderate Risk Symptoms ─────────────────────────────────
     'high fever': 7.0, 'fever': 5.0, 'persistent vomiting': 6.5, 'vomiting': 4.0,
     'severe headache': 6.5, 'headache': 3.0, 'diarrhea': 4.5, 'dizziness': 5.5,
     'palpitations': 6.0, 'weakness': 4.5, 'swelling': 5.0, 'jaundice': 7.0,
     'blood in urine': 7.5, 'blood in stool': 7.5,
 
-    // ── Non-Urgent / Low Risk Symptoms ──────────────────────────────────
     'cough': 3.5, 'runny nose': 2.0, 'sore throat': 3.0, 'mild rash': 3.0,
     'muscle ache': 3.5, 'fatigue': 4.0, 'nausea': 3.5, 'rash': 3.5,
   };
 
   const medicalHistoryWeights = {
-    // Life-threatening conditions
     'cancer': 9.0, 'carcinoma': 9.0, 'tumor': 8.5, 'leukemia': 9.5, 'lymphoma': 9.0,
     'heart disease': 8.5, 'heart failure': 9.0, 'cardiac': 8.5,
     'kidney failure': 9.0, 'renal failure': 9.0, 'liver failure': 9.0,
     'hiv': 8.5, 'aids': 9.0, 'tuberculosis': 8.0, 'tb': 8.0,
     'sepsis': 9.5, 'stroke': 8.5, 'paralysis': 8.5,
 
-    // Moderate / Chronic conditions
     'diabetes': 7.0, 'diabetic': 7.0, 'hypertension': 6.5, 'high blood pressure': 6.5,
     'asthma': 6.0, 'copd': 7.0, 'chronic': 6.0, 'epilepsy': 7.0,
     'anemia': 5.5, 'malnutrition': 6.0, 'pneumonia': 7.5, 'hepatitis': 7.0,
     'thyroid': 5.5, 'arthritis': 4.5, 'sickle cell': 8.0,
     'dengue': 7.5, 'malaria': 7.0, 'typhoid': 6.5,
 
-    // Low-risk conditions
     'allergy': 3.5, 'allergies': 3.5, 'migraine': 4.5,
   };
 
@@ -323,7 +312,6 @@ app.post('/api/analyze-symptoms', async (req, res) => {
     maxSingleRisk = Math.max(maxSingleRisk, score);
   });
 
-  // Score medical history
   let maxHistoryRisk = 0;
   const matchedConditions = [];
   if (medicalHistory) {
@@ -356,7 +344,6 @@ app.post('/api/analyze-symptoms', async (req, res) => {
     guidance += ` Pre-existing condition(s) detected: ${matchedConditions.map(c => c.condition).join(', ')}.`;
   }
 
-  // Save symptom log if patientId provided
   let logId = null;
   if (patientId) {
     try {
@@ -384,8 +371,110 @@ app.post('/api/analyze-symptoms', async (req, res) => {
     }
   }
 
-  res.json({ riskLevel, guidance, isEmergency, analyzedSymptoms: symptoms, matchedConditions, logId });
-});
+  return { riskLevel, guidance, isEmergency, analyzedSymptoms: symptoms, matchedConditions, logId, source: 'rule-engine' };
+}
+
+// Predict Endpoint (ML Model + Medical History Integration)
+async function handlePredict(req, res) {
+  const { symptoms, patientId, medicalHistory } = req.body;
+
+  if (!symptoms || !Array.isArray(symptoms)) {
+    return res.status(400).json({ error: 'Symptoms array is required' });
+  }
+
+  const mlApiUrl = process.env.ML_API_URL || 'http://localhost:8000';
+
+  try {
+    const symptomText = symptoms.join(', ');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 sec timeout
+
+    const mlResponse = await fetch(`${mlApiUrl}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symptom: symptomText || 'General Malaise' }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (!mlResponse.ok) throw new Error(`ML Service responded with status ${mlResponse.status}`);
+
+    const mlData = await mlResponse.json();
+    let riskLevel = mlData.risk_level === 'High' ? 'High Emergency' : (mlData.risk_level === 'Medium' ? 'Moderate Risk' : 'Low Risk');
+
+    const matchedConditions = [];
+    if (medicalHistory) {
+      const HIGH_CONDITIONS = ['cancer','carcinoma','tumor','leukemia','lymphoma','heart failure','kidney failure','renal failure','liver failure','hiv','aids','tuberculosis','tb','sepsis','sickle cell'];
+      const MED_CONDITIONS = ['diabetes','diabetic','hypertension','high blood pressure','asthma','copd','epilepsy','anemia','malnutrition','pneumonia','hepatitis','dengue','malaria','typhoid','cardiac','heart disease'];
+      const h = medicalHistory.toLowerCase();
+
+      HIGH_CONDITIONS.forEach(c => { if (h.includes(c)) matchedConditions.push({ condition: c, weight: 9.0 }); });
+      MED_CONDITIONS.forEach(c => { if (h.includes(c)) matchedConditions.push({ condition: c, weight: 6.5 }); });
+
+      if (HIGH_CONDITIONS.some(c => h.includes(c))) {
+        riskLevel = 'High Emergency';
+      } else if (MED_CONDITIONS.some(c => h.includes(c)) && riskLevel === 'Low Risk') {
+        riskLevel = 'Moderate Risk';
+      }
+    }
+
+    let isEmergency = false;
+    let guidance = 'Rest, maintain hydration, and monitor symptoms. Consult a local clinic if symptoms persist.';
+    if (riskLevel === 'High Emergency') {
+      guidance = 'CRITICAL TRIAGE: Immediate hospital referral required. Life-threatening pathology possible. Dispatching alert to nearest health center.';
+      isEmergency = true;
+    } else if (riskLevel === 'Moderate Risk') {
+      guidance = 'URGENT TRIAGE: Consult with a primary health center within 24 hours. Monitor closely for escalation of symptoms.';
+    }
+
+    let logId = null;
+    if (patientId) {
+      try {
+        const log = await prisma.symptomLog.create({
+          data: { patientId, symptoms: symptomText, riskLevel, notes: guidance }
+        });
+        logId = log.id;
+
+        if (isEmergency) {
+          const activeEmergency = await prisma.emergency.findFirst({
+            where: { patientId, status: 'Active' }
+          });
+          if (!activeEmergency) {
+            await prisma.emergency.create({
+              data: {
+                patientId,
+                description: `ML Triage (${mlData.risk_level}, Conf: ${Math.round(mlData.confidence * 100)}%): ${symptomText}`,
+                status: 'Active'
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to log symptom', e);
+      }
+    }
+
+    res.json({
+      riskLevel,
+      guidance,
+      isEmergency,
+      analyzedSymptoms: symptoms,
+      matchedConditions,
+      confidence: mlData.confidence,
+      warning: mlData.warning,
+      logId,
+      source: 'ml-model'
+    });
+
+  } catch (err) {
+    console.warn('ML Predict API unavailable, falling back to rule-based engine:', err.message);
+    const fallbackResult = await runRuleBasedTriage(symptoms, patientId, medicalHistory);
+    res.json(fallbackResult);
+  }
+}
+
+app.post('/api/predict', handlePredict);
+app.post('/api/analyze-symptoms', handlePredict);
 
 
 // Sync Offline Queue
@@ -509,6 +598,21 @@ app.patch('/api/emergencies/:id/resolve', async (req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const mlProcess = spawn('python', ['ml/api.py'], {
+          cwd: path.resolve(__dirname, '..'),
+          stdio: 'inherit',
+          shell: true
+        });
+        mlProcess.on('error', (e) => {
+          console.log('Local ML Python process error:', e.message);
+        });
+      } catch (err) {
+        console.log('Could not spawn local ML service:', err.message);
+      }
+    }
   });
 }
 
