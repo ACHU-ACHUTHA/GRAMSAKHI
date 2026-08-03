@@ -1,4 +1,4 @@
-# 🌾 GRAMSAKHI
+#  GRAMSAKHI
 
 > Smart Rural Healthcare & Emergency Support Platform
 
